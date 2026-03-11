@@ -72,7 +72,8 @@
         "mglaman/phpstan-drupal": "^2.0",
         "phpstan/phpstan-deprecation-rules": "^2.0",
         "symplify/easy-coding-standard": "^13.0",
-        "drupal/webform": "^6.3@beta"
+        "drupal/webform": "^6.3@beta",
+        "drupal/key": "^1.22"
     },
     "extra": {
         "installer-paths": {

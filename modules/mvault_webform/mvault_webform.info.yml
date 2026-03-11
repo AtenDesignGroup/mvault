@@ -1,0 +1,9 @@
+php: 8.3
+type: module
+name: MVault Webform
+description: Provides a Webform handler for PBS MVault membership management.
+core_version_requirement: ^10.3 || ^11
+package: MVault
+dependencies:
+  - mvault:mvault
+  - webform:webform

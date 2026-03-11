@@ -1,5 +1,7 @@
 php: 8.3
 type: module
 name: MVault
-description: Provides MVault functionality.
+description: Provides MVault functionality for PBS membership management via the MVault API.
 core_version_requirement: ^10.3 || ^11
+suggests:
+  - key:key

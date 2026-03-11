@@ -1,0 +1,12 @@
+services:
+  mvault.client:
+    class: Drupal\mvault\Client\MvaultClient
+    arguments:
+      - '@http_client'
+      - '@?key.repository'
+      - '@config.factory'
+      - '@logger.channel.mvault'
+
+  logger.channel.mvault:
+    parent: logger.channel_base
+    arguments: ['mvault']

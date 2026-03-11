@@ -1,0 +1,41 @@
+webform.handler.mvault_membership:
+  type: mapping
+  label: 'MVault Membership handler settings'
+  mapping:
+    field_mappings:
+      type: mapping
+      label: 'Field mappings'
+      mapping:
+        membership_id_field:
+          type: string
+          label: 'Membership ID field'
+        first_name_field:
+          type: string
+          label: 'First name field'
+        last_name_field:
+          type: string
+          label: 'Last name field'
+        email_field:
+          type: string
+          label: 'Email field'
+        library_id_field:
+          type: string
+          label: 'Library ID field'
+        offer_id_field:
+          type: string
+          label: 'Offer ID field'
+    membership_id_pattern:
+      type: string
+      label: 'Membership ID pattern'
+    membership_duration_days:
+      type: integer
+      label: 'Membership duration (days)'
+    success_message:
+      type: text
+      label: 'Success message'
+    already_active_message:
+      type: text
+      label: 'Already active message'
+    error_message:
+      type: text
+      label: 'Error message'

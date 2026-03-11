@@ -1,0 +1,9 @@
+mvault.settings:
+  path: '/admin/config/services/mvault'
+  defaults:
+    _form: '\Drupal\mvault\Form\SettingsForm'
+    _title: 'MVault Settings'
+  requirements:
+    _permission: 'administer site configuration'
+  options:
+    _admin_route: TRUE

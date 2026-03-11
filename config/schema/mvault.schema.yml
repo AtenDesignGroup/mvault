@@ -1,0 +1,19 @@
+mvault.settings:
+  type: config_object
+  label: 'MVault settings'
+  mapping:
+    station_id:
+      type: string
+      label: 'Station ID'
+    api_key_id:
+      type: string
+      label: 'API Key ID'
+    api_key:
+      type: string
+      label: 'API Key (plain text fallback)'
+    default_offer_id:
+      type: string
+      label: 'Default Offer ID'
+    membership_duration_days:
+      type: integer
+      label: 'Membership Duration (days)'
