@@ -1,0 +1,109 @@
+{
+    "name": "drupal/mvault",
+    "description": "Provides MVault functionality.",
+    "type": "drupal-module",
+    "license": "GPL-2.0+",
+    "prefer-stable": true,
+    "minimum-stability": "dev",
+    "homepage": "https://www.drupal.org/project/mvault",
+    "authors": [
+        {
+            "name": "Travis Tomka",
+            "email": "underoathosx@gmail.com",
+            "homepage": "https://www.drupal.org/u/droath"
+        }
+    ],
+    "config": {
+        "allow-plugins": {
+            "composer/installers": true,
+            "cweagans/composer-patches": true,
+            "drupal/core-composer-scaffold": true,
+            "php-http/discovery": true,
+            "phpstan/extension-installer": true,
+            "tbachert/spi": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/paratest",
+        "analyse": "vendor/bin/phpstan analyse",
+        "format": [
+            "vendor/bin/ecs --fix",
+            "vendor/bin/phpcbf"
+
+        ]
+    },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/AtenDesignGroup/auth0"
+        },
+        {
+            "type": "composer",
+            "url": "https://packages.drupal.org/8"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Drupal\\mvault\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Drupal\\Tests\\mvault\\": "tests/src/"
+        }
+    },
+    "require": {
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "composer/installers": "^1 || ^2",
+        "drupal/core-composer-scaffold": "^11",
+        "cweagans/composer-patches": "~1.0",
+        "drupal/core-recommended": "^11",
+        "drupal/core-dev": "^11",
+        "php-parallel-lint/php-parallel-lint": "^1.2",
+        "drush/drush": "^13.6",
+        "drupal/admin_toolbar": "^3.6",
+        "drupal/devel_entity_updates": "^5.0@RC",
+        "brianium/paratest": "^7.8",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/extension-installer": "^1.4",
+        "mglaman/phpstan-drupal": "^2.0",
+        "phpstan/phpstan-deprecation-rules": "^2.0",
+        "symplify/easy-coding-standard": "^13.0",
+        "drupal/webform": "^6.3@beta"
+    },
+    "extra": {
+        "installer-paths": {
+            "web/core": [
+                "type:drupal-core"
+            ],
+            "web/libraries/{$name}": [
+                "type:drupal-library"
+            ],
+            "web/modules/contrib/{$name}": [
+                "type:drupal-module"
+            ],
+            "web/profiles/contrib/{$name}": [
+                "type:drupal-profile"
+            ],
+            "web/themes/contrib/{$name}": [
+                "type:drupal-theme"
+            ],
+            "drush/{$name}": [
+                "type:drupal-drush"
+            ]
+        },
+        "drupal-scaffold": {
+            "locations": {
+                "web-root": "web/"
+            }
+        },
+        "drush": {
+            "services": {
+                "drush.services.yml": "^9 || ^10 || ^11"
+            }
+        }
+    }
+}

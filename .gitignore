@@ -1,0 +1,11 @@
+/bin
+/web
+/vendor
+/reports
+/recipes
+/.claude
+CLAUDE.md
+/agent-os
+/composer.lock
+/.editorconfig
+/.gitattributes

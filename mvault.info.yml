@@ -1,0 +1,5 @@
+php: 8.3
+type: module
+name: MVault
+description: Provides MVault functionality.
+core_version_requirement: ^10.3 || ^11
