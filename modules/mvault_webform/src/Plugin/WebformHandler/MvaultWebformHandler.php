@@ -63,13 +63,13 @@ class MvaultWebformHandler extends WebformHandlerBase {
    */
   public function defaultConfiguration(): array {
     return [
-      'membership_id_field' => '',
       'field_mappings' => [
         'first_name_field' => '',
         'last_name_field' => '',
         'email_field' => '',
         'library_id_field' => '',
       ],
+      'membership_id_field' => '',
       'membership_id_pattern' => 'en_{field}',
       'membership_duration_days' => 0,
       'success_message' => 'Your PBS Passport membership has been activated. Thank you!',
@@ -204,11 +204,6 @@ class MvaultWebformHandler extends WebformHandlerBase {
   public function submitConfigurationForm(array &$form, FormStateInterface $form_state): void {
     parent::submitConfigurationForm($form, $form_state);
 
-    $this->configuration['membership_id_field'] = $form_state->getValue([
-      'membership_settings',
-      'membership_id_field',
-    ]);
-
     $this->configuration['field_mappings'] = [
       'first_name_field' => $form_state->getValue([
         'field_mappings',
@@ -224,32 +219,42 @@ class MvaultWebformHandler extends WebformHandlerBase {
         'library_id_field',
       ]),
     ];
-
+    $this->configuration['membership_id_field'] = $form_state->getValue([
+      'membership_id_field',
+    ]);
     $this->configuration['membership_id_pattern'] = $form_state->getValue([
-      'membership_settings',
       'membership_id_pattern',
     ]);
     $this->configuration['membership_duration_days'] = (int) $form_state->getValue([
-      'membership_settings',
       'membership_duration_days',
     ]);
-    $this->configuration['success_message'] = $form_state->getValue('success_message');
-    $this->configuration['already_active_message'] = $form_state->getValue('already_active_message');
-    $this->configuration['error_message'] = $form_state->getValue('error_message');
+    $this->configuration['success_message'] = $form_state->getValue([
+      'success_message',
+    ]);
+    $this->configuration['already_active_message'] = $form_state->getValue([
+      'already_active_message',
+    ]);
+    $this->configuration['error_message'] = $form_state->getValue([
+      'error_message',
+    ]);
   }
 
   /**
    * {@inheritdoc}
    */
   public function getSummary(): array {
-    $mappings = $this->configuration['field_mappings'];
+    $defaults = $this->defaultConfiguration();
+    $mappings = $this->configuration['field_mappings'] ?? $defaults['field_mappings'];
+    $emailField = $mappings['email_field'] ?? '';
+    $pattern = $this->configuration['membership_id_pattern'] ?? $defaults['membership_id_pattern'];
+    $durationDays = $this->configuration['membership_duration_days'] ?? 0;
 
     return [
       '#theme' => 'item_list',
       '#items' => [
-        $this->t('Email field: @field', ['@field' => $mappings['email_field'] ?: $this->t('(not set)')]),
-        $this->t('Membership ID pattern: @pattern', ['@pattern' => $this->configuration['membership_id_pattern']]),
-        $this->t('Duration: @days days', ['@days' => $this->configuration['membership_duration_days'] ?: $this->t('module default')]),
+        $this->t('Email field: @field', ['@field' => $emailField !== '' ? $emailField : $this->t('(not set)')]),
+        $this->t('Membership ID pattern: @pattern', ['@pattern' => $pattern]),
+        $this->t('Duration: @days days', ['@days' => $durationDays !== 0 ? (string) $durationDays : $this->t('module default')]),
       ],
     ];
   }
