@@ -39,6 +39,7 @@ class SettingsForm extends ConfigFormBase {
       '#title' => $this->t('Default Offer ID'),
       '#description' => $this->t('The default MVault offer ID used when creating memberships.'),
       '#default_value' => $config->get('default_offer_id'),
+      '#required' => TRUE,
     ];
 
     $form['membership_duration_days'] = [

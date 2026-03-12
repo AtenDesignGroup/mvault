@@ -353,7 +353,7 @@ class MvaultWebformHandler extends WebformHandlerBase {
     }
 
     $existingMembership = $this->mvaultClient->getMembershipByEmail($email);
-    $membership = $this->createMembership($extractedFields, $membershipId);
+    $membership = $this->createMembership($extractedFields);
 
     return $existingMembership !== NULL
       ? $this->mvaultClient->renewMembership($membershipId, $membership->expireDate, $existingMembership)
@@ -422,20 +422,16 @@ class MvaultWebformHandler extends WebformHandlerBase {
    *
    * @param array<string, string> $extractedFields
    *   The mapped field values from the submission.
-   * @param string $membershipId
-   *   The formatted membership ID, used as the offer value.
    *
    * @return \Drupal\mvault\ValueObject\Membership
    *   The membership value object populated from submission data.
    * @throws \DateMalformedStringException
    */
-  private function createMembership(
-    array $extractedFields,
-    string $membershipId
-  ): Membership {
+  private function createMembership(array $extractedFields): Membership {
     $startDate = new \DateTimeImmutable('yesterday');
     $durationDays = $this->resolveDurationDays();
     $expireDate = $startDate->modify(sprintf('+%d days', $durationDays));
+    $offerId = (string) $this->configFactory->get('mvault.settings')->get('default_offer_id');
 
     $additionalMetadata = $extractedFields['libraryId'] !== ''
       ? ['library_id' => $extractedFields['libraryId']]
@@ -445,7 +441,7 @@ class MvaultWebformHandler extends WebformHandlerBase {
       firstName: $extractedFields['firstName'],
       lastName: $extractedFields['lastName'],
       email: $extractedFields['email'],
-      offer: $membershipId,
+      offer: $offerId,
       startDate: $startDate,
       expireDate: $expireDate,
       additionalMetadata: $additionalMetadata,
