@@ -7,8 +7,8 @@ namespace Drupal\mvault\Client;
 use Psr\Log\LoggerInterface;
 use Drupal\Core\Site\Settings;
 use GuzzleHttp\ClientInterface;
-use Drupal\mvault\ValueObject\Membership;
 use Drupal\key\KeyRepositoryInterface;
+use Drupal\mvault\ValueObject\Membership;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\GuzzleException;
 use Drupal\Core\Config\ConfigFactoryInterface;
@@ -19,7 +19,6 @@ use Drupal\mvault\Exception\MvaultNotFoundException;
  * HTTP client for the PBS MVault API.
  */
 class MvaultClient implements MvaultClientInterface {
-
   /** The default MVault API base URL. */
   private const string DEFAULT_BASE_URL = 'https://mvault.services.pbs.org/api';
 
@@ -41,20 +40,21 @@ class MvaultClient implements MvaultClientInterface {
     protected readonly ?KeyRepositoryInterface $keyRepository,
     protected readonly ConfigFactoryInterface $configFactory,
     protected readonly LoggerInterface $logger,
-  ) {}
+  ) {
+  }
 
   /**
    * {@inheritdoc}
-   *
    */
-  public function createMembership(string $membershipId, Membership $membership): Membership {
-    $data = $this->requestObject(
+  public function createMembership(
+    string $membershipId,
+    Membership $membership,
+  ): Membership {
+    return Membership::fromApiResponse($this->requestObject(
       'PUT',
       $this->membershipUrl($membershipId),
-      $membership->toApiPayload()
-    );
-
-    return Membership::fromApiResponse($data);
+      $membership->toApiPayload(),
+    ));
   }
 
   /**
@@ -62,11 +62,10 @@ class MvaultClient implements MvaultClientInterface {
    */
   public function getMembershipByEmail(string $email): ?Membership {
     try {
-      $data = $this->requestObject('GET', $this->emailLookupUrl($email));
-
-      return Membership::fromApiResponse($data);
-    }
-    catch (MvaultNotFoundException) {
+      return Membership::fromApiResponse(
+        $this->requestObject('GET', $this->emailLookupUrl($email)),
+      );
+    } catch (MvaultNotFoundException) {
       return NULL;
     }
   }
@@ -78,7 +77,7 @@ class MvaultClient implements MvaultClientInterface {
     try {
       $items = $this->requestList(
         'GET',
-        $this->activeEmailLookupUrl($email)
+        $this->activeEmailLookupUrl($email),
       );
 
       if (empty($items)) {
@@ -86,8 +85,7 @@ class MvaultClient implements MvaultClientInterface {
       }
 
       return Membership::fromApiResponse($items[0]);
-    }
-    catch (MvaultNotFoundException) {
+    } catch (MvaultNotFoundException) {
       return NULL;
     }
   }
@@ -98,7 +96,7 @@ class MvaultClient implements MvaultClientInterface {
   public function renewMembership(
     string $membershipId,
     \DateTimeImmutable $newExpireDate,
-    Membership $existingMembership
+    Membership $existingMembership,
   ): Membership {
     $updated = new Membership(
       firstName: $existingMembership->firstName,
@@ -116,7 +114,7 @@ class MvaultClient implements MvaultClientInterface {
     $data = $this->requestObject(
       'PUT',
       $this->membershipUrl($membershipId),
-      $updated->toApiPayload()
+      $updated->toApiPayload(),
     );
 
     return Membership::fromApiResponse($data);
@@ -133,14 +131,14 @@ class MvaultClient implements MvaultClientInterface {
    * @param array<string, mixed> $payload
    *   The request payload for write operations.
    *
-   * @return array<string, mixed>
-   *   The decoded JSON response as an associative array.
-   * @throws \Drupal\mvault\Exception\MvaultNotFoundException
-   *   When the API returns 404.
-   *
    * @throws \Drupal\mvault\Exception\MvaultApiException
    * @throws \JsonException
    *   When the API returns any other error status code.
+   * @throws \Drupal\mvault\Exception\MvaultNotFoundException
+   *   When the API returns 404.
+   *
+   * @return array<string, mixed>
+   *   The decoded JSON response as an associative array.
    */
   private function requestObject(string $method, string $url, array $payload = []): array {
     $raw = $this->executeRequest($method, $url, $payload);
@@ -163,14 +161,14 @@ class MvaultClient implements MvaultClientInterface {
    * @param array<string, mixed> $payload
    *   The request payload for write operations.
    *
-   * @return array<int, array<string, mixed>>
-   *   The decoded JSON response as a list of associative arrays.
-   * @throws \Drupal\mvault\Exception\MvaultNotFoundException
-   *   When the API returns 404.
-   *
    * @throws \Drupal\mvault\Exception\MvaultApiException
    *   When the API returns any other error status code.
    * @throws \JsonException
+   * @throws \Drupal\mvault\Exception\MvaultNotFoundException
+   *   When the API returns 404.
+   *
+   * @return array<int, array<string, mixed>>
+   *   The decoded JSON response as a list of associative arrays.
    */
   private function requestList(string $method, string $url, array $payload = []): array {
     $raw = $this->executeRequest($method, $url, $payload);
@@ -193,14 +191,14 @@ class MvaultClient implements MvaultClientInterface {
    * @param array<string, mixed> $payload
    *   The request payload for write operations.
    *
-   * @return mixed
-   *   The decoded JSON response body.
-   * @throws \Drupal\mvault\Exception\MvaultNotFoundException
-   *   When the API returns a 404 status code.
-   *
    * @throws \Drupal\mvault\Exception\MvaultApiException
    *   When the API returns any other error status code.
    * @throws \JsonException
+   * @throws \Drupal\mvault\Exception\MvaultNotFoundException
+   *   When the API returns a 404 status code.
+   *
+   * @return mixed
+   *   The decoded JSON response body.
    */
   private function executeRequest(string $method, string $url, array $payload = []): mixed {
     $options = [
@@ -223,8 +221,7 @@ class MvaultClient implements MvaultClientInterface {
       }
 
       return json_decode($body, TRUE, 512, JSON_THROW_ON_ERROR);
-    }
-    catch (ClientException $e) {
+    } catch (ClientException $e) {
       $statusCode = $e->getResponse()->getStatusCode();
       $responseBody = $e->getResponse()->getBody()->getContents();
 
@@ -248,8 +245,7 @@ class MvaultClient implements MvaultClientInterface {
         responseBody: $responseBody,
         previous: $e,
       );
-    }
-    catch (GuzzleException $e) {
+    } catch (GuzzleException $e) {
       $this->logger->error('MVault HTTP request failed for @url: @message', [
         '@url' => $url,
         '@message' => $e->getMessage(),
@@ -280,8 +276,9 @@ class MvaultClient implements MvaultClientInterface {
 
     if ($credentials === '') {
       $this->logger->warning(
-        'MVault: no API credentials configured. Requests will be unauthenticated.'
+        'MVault: no API credentials configured. Requests will be unauthenticated.',
       );
+
       return NULL;
     }
 
@@ -308,7 +305,7 @@ class MvaultClient implements MvaultClientInterface {
 
       $this->logger->warning(
         'MVault API key "@id" not found in Key repository.',
-        ['@id' => $keyId]
+        ['@id' => $keyId],
       );
     }
 
@@ -365,7 +362,7 @@ class MvaultClient implements MvaultClientInterface {
       '%s/stations/%s/memberships/%s/',
       $this->baseUrl(),
       $this->stationId(),
-      $membershipId
+      $membershipId,
     );
   }
 
@@ -383,7 +380,7 @@ class MvaultClient implements MvaultClientInterface {
       '%s/stations/%s/memberships/filter/email/%s/',
       $this->baseUrl(),
       $this->stationId(),
-      urlencode($email)
+      urlencode($email),
     );
   }
 
@@ -401,8 +398,7 @@ class MvaultClient implements MvaultClientInterface {
       '%s/stations/%s/memberships/active/?email=%s',
       $this->baseUrl(),
       $this->stationId(),
-      urlencode($email)
+      urlencode($email),
     );
   }
-
 }

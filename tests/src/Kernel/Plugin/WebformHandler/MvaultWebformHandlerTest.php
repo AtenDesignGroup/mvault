@@ -11,6 +11,7 @@ use Drupal\mvault\ValueObject\Membership;
 use Drupal\webform\Entity\Webform;
 use Drupal\webform\Entity\WebformSubmission;
 use Drupal\webform\WebformInterface;
+use Drupal\webform\WebformSubmissionInterface;
 
 /**
  * Kernel tests for the MvaultWebformHandler plugin.
@@ -74,13 +75,12 @@ class MvaultWebformHandlerTest extends KernelTestBase {
       'conditions' => [],
       'weight' => 0,
       'settings' => [
+        'membership_id_field' => 'supporter_id',
         'field_mappings' => [
-          'membership_id_field' => 'supporter_id',
           'first_name_field' => 'first_name',
           'last_name_field' => 'last_name',
           'email_field' => 'email',
           'library_id_field' => 'library_id',
-          'offer_id_field' => '',
         ],
         'membership_id_pattern' => 'lib_{field}',
         'membership_duration_days' => 730,
@@ -106,7 +106,7 @@ class MvaultWebformHandlerTest extends KernelTestBase {
 
     $this->assertSame('lib_{field}', $settings['membership_id_pattern']);
     $this->assertSame(730, $settings['membership_duration_days']);
-    $this->assertSame('supporter_id', $settings['field_mappings']['membership_id_field']);
+    $this->assertSame('supporter_id', $settings['membership_id_field']);
     $this->assertSame('email', $settings['field_mappings']['email_field']);
     $this->assertSame('Membership activated!', $settings['success_message']);
   }
@@ -263,14 +263,14 @@ class MvaultWebformHandlerTest extends KernelTestBase {
     $webform = $this->createHandlerWebform();
 
     // If the exception propagates, this line would never be reached.
-    $this->submitWebform($webform, [
+    $submission = $this->submitWebform($webform, [
       'email' => 'error@example.com',
       'first_name' => 'Error',
       'last_name' => 'User',
       'supporter_id' => 'sup-error',
     ]);
 
-    $this->assertTrue(TRUE, 'Webform submission must complete even when API throws MvaultApiException.');
+    $this->assertNotNull($submission->id(), 'Webform submission must be persisted even when API throws MvaultApiException.');
   }
 
   /**
@@ -301,6 +301,78 @@ class MvaultWebformHandlerTest extends KernelTestBase {
 
     $errorMessages = $messages['error'] ?? [];
     $this->assertNotEmpty($errorMessages, 'An error message must be shown to the user when the API call fails.');
+  }
+
+  // -------------------------------------------------------------------------
+  // postSave() — regression: corrupted configuration safeguards
+  // -------------------------------------------------------------------------
+
+  /**
+   * Tests that postSave() returns early and logs a warning when field_mappings
+   * is empty, without throwing a TypeError or calling the API client.
+   *
+   * Regression: guards against configuration corruption where field_mappings
+   * is stored as an empty array.
+   */
+  public function testPostSaveHandlesNullFieldMappingsGracefully(): void {
+    $mockClient = $this->createMock(MvaultClientInterface::class);
+    $mockClient->expects($this->never())->method('getActiveMembershipByEmail');
+    $mockClient->expects($this->never())->method('getMembershipByEmail');
+    $mockClient->expects($this->never())->method('createMembership');
+    $mockClient->expects($this->never())->method('renewMembership');
+
+    $this->container->set('mvault.client', $mockClient);
+
+    $webform = $this->createHandlerWebformWithFieldMappings(membershipIdField: '', fieldMappings: []);
+
+    // No exception should be thrown; submission must complete successfully.
+    $submission = $this->submitWebform($webform, [
+      'email' => 'test@example.com',
+      'first_name' => 'Test',
+      'last_name' => 'User',
+      'supporter_id' => 'sup-001',
+    ]);
+
+    $this->assertNotNull($submission->id(), 'Webform submission must be persisted when field_mappings is empty.');
+  }
+
+  /**
+   * Tests that postSave() returns early and only logs a warning when
+   * email_field is empty, without calling the API client or displaying
+   * a user-facing message.
+   *
+   * Regression: guards against configuration where field_mappings is present
+   * but email_field is not configured (empty string or null). In postSave()
+   * context the form is already submitted, so only logging is appropriate.
+   */
+  public function testPostSaveHandlesNullEmailFieldGracefully(): void {
+    $mockClient = $this->createMock(MvaultClientInterface::class);
+    $mockClient->expects($this->never())->method('getActiveMembershipByEmail');
+    $mockClient->expects($this->never())->method('getMembershipByEmail');
+    $mockClient->expects($this->never())->method('createMembership');
+    $mockClient->expects($this->never())->method('renewMembership');
+
+    $this->container->set('mvault.client', $mockClient);
+
+    $webform = $this->createHandlerWebformWithFieldMappings(
+      membershipIdField: 'supporter_id',
+      fieldMappings: [
+        'first_name_field' => 'first_name',
+        'last_name_field' => 'last_name',
+        'email_field' => '',
+        'library_id_field' => '',
+      ],
+    );
+
+    // No exception should be thrown; submission must complete successfully.
+    $submission = $this->submitWebform($webform, [
+      'email' => 'test@example.com',
+      'first_name' => 'Test',
+      'last_name' => 'User',
+      'supporter_id' => 'sup-001',
+    ]);
+
+    $this->assertNotNull($submission->id(), 'Webform submission must be persisted when email_field is not configured.');
   }
 
   // -------------------------------------------------------------------------
@@ -369,13 +441,12 @@ class MvaultWebformHandlerTest extends KernelTestBase {
       'conditions' => [],
       'weight' => 0,
       'settings' => [
+        'membership_id_field' => 'supporter_id',
         'field_mappings' => [
-          'membership_id_field' => 'supporter_id',
           'first_name_field' => 'first_name',
           'last_name_field' => 'last_name',
           'email_field' => 'email',
           'library_id_field' => '',
-          'offer_id_field' => '',
         ],
         'membership_id_pattern' => 'en_{field}',
         'membership_duration_days' => 365,
@@ -399,14 +470,66 @@ class MvaultWebformHandlerTest extends KernelTestBase {
    *   The webform to submit against.
    * @param array<string, string> $data
    *   The submission field values.
+   *
+   * @return \Drupal\webform\WebformSubmissionInterface
+   *   The saved submission entity.
    */
-  private function submitWebform(WebformInterface $webform, array $data): void {
+  private function submitWebform(WebformInterface $webform, array $data): WebformSubmissionInterface {
     $submission = WebformSubmission::create([
       'webform_id' => $webform->id(),
       'data' => $data,
     ]);
 
     $submission->save();
+
+    return $submission;
+  }
+
+  /**
+   * Creates a webform with the MVault handler configured with custom mappings.
+   *
+   * Used to simulate configuration corruption or misconfiguration scenarios
+   * where field_mappings differs from the standard handler setup.
+   *
+   * @param string $membershipIdField
+   *   The membership_id_field value to inject into the handler settings.
+   * @param array<string, string> $fieldMappings
+   *   The field_mappings array to inject into the handler settings.
+   *
+   * @return \Drupal\webform\WebformInterface
+   *   The saved webform entity with the MVault handler.
+   */
+  private function createHandlerWebformWithFieldMappings(string $membershipIdField, array $fieldMappings): WebformInterface {
+    $webform = $this->createTestWebform();
+
+    /** @var \Drupal\webform\Plugin\WebformHandlerManagerInterface $handler_manager */
+    $handler_manager = $this->container->get('plugin.manager.webform.handler');
+
+    /** @var \Drupal\mvault_webform\Plugin\WebformHandler\MvaultWebformHandler $handler */
+    $handler = $handler_manager->createInstance('mvault_membership', [
+      'id' => 'mvault_membership',
+      'handler_id' => 'mvault_membership',
+      'label' => 'MVault Membership',
+      'notes' => '',
+      'status' => 1,
+      'conditions' => [],
+      'weight' => 0,
+      'settings' => [
+        'membership_id_field' => $membershipIdField,
+        'field_mappings' => $fieldMappings,
+        'membership_id_pattern' => 'en_{field}',
+        'membership_duration_days' => 365,
+        'success_message' => 'Your PBS Passport membership has been activated. Thank you!',
+        'already_active_message' => 'You already have an active PBS Passport membership and are not eligible for this offer.',
+        'error_message' => 'We were unable to process your membership at this time. Please contact support.',
+      ],
+    ]);
+
+    $handler->setWebform($webform);
+    $webform->addWebformHandler($handler);
+    $webform->save();
+
+    return $webform;
   }
 
   /**

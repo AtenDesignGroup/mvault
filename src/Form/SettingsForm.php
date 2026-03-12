@@ -65,8 +65,7 @@ class SettingsForm extends ConfigFormBase {
     if (\Drupal::moduleHandler()->moduleExists('key')) {
       $config->set('api_key_id', $form_state->getValue('api_key_id'))
         ->set('api_key', '');
-    }
-    else {
+    } else {
       $config->set('api_key', $form_state->getValue('api_key_id'))
         ->set('api_key_id', '');
     }

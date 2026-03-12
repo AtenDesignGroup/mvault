@@ -2,13 +2,13 @@ webform.handler.mvault_membership:
   type: mapping
   label: 'MVault Membership handler settings'
   mapping:
+    membership_id_field:
+      type: string
+      label: 'Membership ID field'
     field_mappings:
       type: mapping
       label: 'Field mappings'
       mapping:
-        membership_id_field:
-          type: string
-          label: 'Membership ID field'
         first_name_field:
           type: string
           label: 'First name field'
@@ -21,9 +21,6 @@ webform.handler.mvault_membership:
         library_id_field:
           type: string
           label: 'Library ID field'
-        offer_id_field:
-          type: string
-          label: 'Offer ID field'
     membership_id_pattern:
       type: string
       label: 'Membership ID pattern'

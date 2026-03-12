@@ -10,7 +10,6 @@ use Drupal\mvault\ValueObject\Membership;
  * Interface for interacting with the PBS MVault API.
  */
 interface MvaultClientInterface {
-
   /**
    * Creates a new membership in MVault.
    *
@@ -20,11 +19,12 @@ interface MvaultClientInterface {
    * @param \Drupal\mvault\ValueObject\Membership $membership
    *   The membership data to create.
    *
-   * @return \Drupal\mvault\ValueObject\Membership
-   *   The created membership as returned by the API.
    * @throws \Drupal\mvault\Exception\MvaultApiException
    *   When the API returns a non-successful HTTP status code.
    * @throws \Drupal\mvault\Exception\MvaultNotFoundException
+   *
+   * @return \Drupal\mvault\ValueObject\Membership
+   *   The created membership as returned by the API.
    */
   public function createMembership(string $membershipId, Membership $membership): Membership;
 
@@ -36,11 +36,12 @@ interface MvaultClientInterface {
    * @param string $email
    *   The member's email address.
    *
-   * @return \Drupal\mvault\ValueObject\Membership|null
-   *   The membership, or null if not found.
    * @throws \Drupal\mvault\Exception\MvaultApiException
    *   When the API returns an unexpected error status code.
    * @throws \JsonException
+   *
+   * @return \Drupal\mvault\ValueObject\Membership|null
+   *   The membership, or null if not found.
    */
   public function getMembershipByEmail(string $email): ?Membership;
 
@@ -52,12 +53,12 @@ interface MvaultClientInterface {
    * @param string $email
    *   The member's email address.
    *
-   * @return \Drupal\mvault\ValueObject\Membership|null
-   *   The active membership, or null if none exists.
    * @throws \Drupal\mvault\Exception\MvaultApiException
    *   When the API returns an unexpected error status code.
-   *
    * @throws \JsonException
+   *
+   * @return \Drupal\mvault\ValueObject\Membership|null
+   *   The active membership, or null if none exists.
    */
   public function getActiveMembershipByEmail(string $email): ?Membership;
 
@@ -71,14 +72,13 @@ interface MvaultClientInterface {
    * @param \Drupal\mvault\ValueObject\Membership $existingMembership
    *   The existing membership data to update.
    *
-   * @return \Drupal\mvault\ValueObject\Membership
-   *   The updated membership as returned by the API.
    * @throws \Drupal\mvault\Exception\MvaultApiException
    *   When the API returns an unexpected error status code.
-   *
    * @throws \Drupal\mvault\Exception\MvaultNotFoundException
    *   When the membership does not exist (404 response).
+   *
+   * @return \Drupal\mvault\ValueObject\Membership
+   *   The updated membership as returned by the API.
    */
   public function renewMembership(string $membershipId, \DateTimeImmutable $newExpireDate, Membership $existingMembership): Membership;
-
 }
