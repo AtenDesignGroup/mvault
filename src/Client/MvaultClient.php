@@ -131,11 +131,11 @@ class MvaultClient implements MvaultClientInterface {
    * @param array<string, mixed> $payload
    *   The request payload for write operations.
    *
-   * @throws \Drupal\mvault\Exception\MvaultApiException
    * @throws \JsonException
    *   When the API returns any other error status code.
    * @throws \Drupal\mvault\Exception\MvaultNotFoundException
    *   When the API returns 404.
+   * @throws \Drupal\mvault\Exception\MvaultApiException
    *
    * @return array<string, mixed>
    *   The decoded JSON response as an associative array.
@@ -161,11 +161,11 @@ class MvaultClient implements MvaultClientInterface {
    * @param array<string, mixed> $payload
    *   The request payload for write operations.
    *
-   * @throws \Drupal\mvault\Exception\MvaultApiException
-   *   When the API returns any other error status code.
    * @throws \JsonException
    * @throws \Drupal\mvault\Exception\MvaultNotFoundException
    *   When the API returns 404.
+   * @throws \Drupal\mvault\Exception\MvaultApiException
+   *   When the API returns any other error status code.
    *
    * @return array<int, array<string, mixed>>
    *   The decoded JSON response as a list of associative arrays.
@@ -191,11 +191,11 @@ class MvaultClient implements MvaultClientInterface {
    * @param array<string, mixed> $payload
    *   The request payload for write operations.
    *
-   * @throws \Drupal\mvault\Exception\MvaultApiException
-   *   When the API returns any other error status code.
    * @throws \JsonException
    * @throws \Drupal\mvault\Exception\MvaultNotFoundException
    *   When the API returns a 404 status code.
+   * @throws \Drupal\mvault\Exception\MvaultApiException
+   *   When the API returns any other error status code.
    *
    * @return mixed
    *   The decoded JSON response body.
@@ -359,7 +359,7 @@ class MvaultClient implements MvaultClientInterface {
    */
   private function membershipUrl(string $membershipId): string {
     return sprintf(
-      '%s/stations/%s/memberships/%s/',
+      '%s/%s/memberships/%s/',
       $this->baseUrl(),
       $this->stationId(),
       $membershipId,
@@ -377,7 +377,7 @@ class MvaultClient implements MvaultClientInterface {
    */
   private function emailLookupUrl(string $email): string {
     return sprintf(
-      '%s/stations/%s/memberships/filter/email/%s/',
+      '%s/%s/memberships/filter/email/%s/',
       $this->baseUrl(),
       $this->stationId(),
       urlencode($email),
@@ -395,7 +395,7 @@ class MvaultClient implements MvaultClientInterface {
    */
   private function activeEmailLookupUrl(string $email): string {
     return sprintf(
-      '%s/stations/%s/memberships/active/?email=%s',
+      '%s/%s/memberships/active/?email=%s',
       $this->baseUrl(),
       $this->stationId(),
       urlencode($email),

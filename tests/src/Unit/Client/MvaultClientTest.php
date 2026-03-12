@@ -84,7 +84,7 @@ class MvaultClientTest extends UnitTestCase {
    */
   public function testCreateMembershipSendsPutRequestToMembershipUrl(): void {
     $membershipId = 'en_12345';
-    $expectedUrl = self::BASE_URL . '/stations/' . self::STATION_ID . '/memberships/' . $membershipId . '/';
+    $expectedUrl = self::BASE_URL . '/' . self::STATION_ID . '/memberships/' . $membershipId . '/';
 
     $this->httpClient->expects($this->once())
       ->method('request')
@@ -196,7 +196,7 @@ class MvaultClientTest extends UnitTestCase {
   public function testGetMembershipByEmailSendsGetRequestToEmailLookupUrl(): void {
     $email = 'jane@example.com';
     $encodedEmail = urlencode($email);
-    $expectedUrl = self::BASE_URL . '/stations/' . self::STATION_ID . '/memberships/filter/email/' . $encodedEmail . '/';
+    $expectedUrl = self::BASE_URL . '/' . self::STATION_ID . '/memberships/filter/email/' . $encodedEmail . '/';
 
     $this->httpClient->expects($this->once())
       ->method('request')
@@ -252,7 +252,7 @@ class MvaultClientTest extends UnitTestCase {
   public function testGetActiveMembershipByEmailSendsGetRequestToActiveEndpoint(): void {
     $email = 'jane@example.com';
     $encodedEmail = urlencode($email);
-    $expectedUrl = self::BASE_URL . '/stations/' . self::STATION_ID . '/memberships/active/?email=' . $encodedEmail;
+    $expectedUrl = self::BASE_URL . '/' . self::STATION_ID . '/memberships/active/?email=' . $encodedEmail;
 
     $this->httpClient->expects($this->once())
       ->method('request')
@@ -324,7 +324,7 @@ class MvaultClientTest extends UnitTestCase {
    */
   public function testRenewMembershipSendsPutRequestToMembershipUrl(): void {
     $membershipId = 'en_12345';
-    $expectedUrl = self::BASE_URL . '/stations/' . self::STATION_ID . '/memberships/' . $membershipId . '/';
+    $expectedUrl = self::BASE_URL . '/' . self::STATION_ID . '/memberships/' . $membershipId . '/';
 
     $this->httpClient->expects($this->once())
       ->method('request')
