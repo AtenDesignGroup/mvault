@@ -7,6 +7,7 @@ namespace Drupal\mvault_webform\Plugin\WebformHandler;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\mvault\ValueObject\Membership;
 use Drupal\mvault\Exception\MvaultException;
+use Drupal\webform\Element\WebformName;
 use Drupal\webform\Plugin\WebformHandlerBase;
 use Drupal\Core\Logger\LoggerChannelInterface;
 use Drupal\webform\WebformSubmissionInterface;
@@ -486,6 +487,13 @@ class MvaultWebformHandler extends WebformHandlerBase {
       return '';
     }
 
+    // Support composite element sub-keys encoded as "parent__sub" (e.g.
+    // "name__first" for the first-name sub-element of a webform_name field).
+    if (str_contains($fieldKey, '__')) {
+      [$parentKey, $subKey] = explode('__', $fieldKey, 2);
+      return (string) ($data[$parentKey][$subKey] ?? '');
+    }
+
     return (string) ($data[$fieldKey] ?? '');
   }
 
@@ -543,6 +551,18 @@ class MvaultWebformHandler extends WebformHandlerBase {
 
     foreach ($elements as $key => $element) {
       if (str_starts_with($key, '#')) {
+        continue;
+      }
+
+      // Expand webform_name composites into individual sub-element options so
+      // the handler can map first name and last name fields independently.
+      if (isset($element['#type']) && $element['#type'] === 'webform_name') {
+        $parentLabel = isset($element['#title']) ? (string) $element['#title'] : $key;
+        foreach (WebformName::getCompositeElements([]) as $subKey => $subElement) {
+          $subLabel = isset($subElement['#title']) ? (string) $subElement['#title'] : $subKey;
+          $compositeKey = $key . '__' . $subKey;
+          $options[$compositeKey] = $parentLabel . ': ' . $subLabel . ' (' . $compositeKey . ')';
+        }
         continue;
       }
 
