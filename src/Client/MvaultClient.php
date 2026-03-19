@@ -124,6 +124,8 @@ class MvaultClient implements MvaultClientInterface {
       'last_name' => $existingMembership->lastName,
       'start_date' => $existingMembership->startDate->format('Y-m-d\TH:i:s\Z'),
       'expire_date' => $newExpireDate->format('Y-m-d\TH:i:s\Z'),
+      'offer' => $existingMembership->offer,
+      'additional_metadata' => $existingMembership->additionalMetadata,
       'status' => 'On',
     ];
 
