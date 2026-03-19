@@ -5,6 +5,9 @@ webform.handler.mvault_membership:
     membership_id_field:
       type: string
       label: 'Membership ID field'
+    mvault_status_field:
+      type: string
+      label: 'Status tracking field'
     field_mappings:
       type: mapping
       label: 'Field mappings'

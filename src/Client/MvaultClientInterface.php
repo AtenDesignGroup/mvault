@@ -63,14 +63,35 @@ interface MvaultClientInterface {
   public function getActiveMembershipByEmail(string $email): ?Membership;
 
   /**
+   * Retrieves a membership by its unique membership ID.
+   *
+   * Returns null when no membership is found (404 response).
+   *
+   * @param string $membershipId
+   *   The unique membership identifier.
+   *
+   * @throws \Drupal\mvault\Exception\MvaultApiException
+   *   When the API returns an unexpected error status code.
+   * @throws \JsonException
+   *
+   * @return \Drupal\mvault\ValueObject\Membership|null
+   *   The membership, or null if not found.
+   */
+  public function getMembershipById(string $membershipId): ?Membership;
+
+  /**
    * Renews an existing membership with a new expiration date.
+   *
+   * Sends a PUT payload containing the required fields from the existing
+   * membership (first_name, last_name, start_date) together with the updated
+   * expire_date and status.
    *
    * @param string $membershipId
    *   The unique membership identifier to renew.
    * @param \DateTimeImmutable $newExpireDate
    *   The new expiration date for the membership.
    * @param \Drupal\mvault\ValueObject\Membership $existingMembership
-   *   The existing membership data to update.
+   *   The existing membership, used to supply required fields in the payload.
    *
    * @throws \Drupal\mvault\Exception\MvaultApiException
    *   When the API returns an unexpected error status code.

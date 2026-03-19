@@ -60,11 +60,31 @@ class MvaultClient implements MvaultClientInterface {
   /**
    * {@inheritdoc}
    */
-  public function getMembershipByEmail(string $email): ?Membership {
+  public function getMembershipById(string $membershipId): ?Membership {
     try {
       return Membership::fromApiResponse(
-        $this->requestObject('GET', $this->emailLookupUrl($email)),
+        $this->requestObject('GET', $this->membershipUrl($membershipId)),
       );
+    } catch (MvaultNotFoundException) {
+      return NULL;
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getMembershipByEmail(string $email): ?Membership {
+    try {
+      $items = $this->requestObject(
+        'GET',
+        $this->emailLookupUrl($email),
+      );
+
+      if (empty($items)) {
+        return NULL;
+      }
+
+      return Membership::fromApiResponse($items['objects'][0]);
     } catch (MvaultNotFoundException) {
       return NULL;
     }
@@ -98,23 +118,19 @@ class MvaultClient implements MvaultClientInterface {
     \DateTimeImmutable $newExpireDate,
     Membership $existingMembership,
   ): Membership {
-    $updated = new Membership(
-      firstName: $existingMembership->firstName,
-      lastName: $existingMembership->lastName,
-      email: $existingMembership->email,
-      offer: $existingMembership->offer,
-      startDate: $existingMembership->startDate,
-      expireDate: $newExpireDate,
-      membershipId: $existingMembership->membershipId,
-      status: $existingMembership->status,
-      token: $existingMembership->token,
-      additionalMetadata: $existingMembership->additionalMetadata,
-    );
+    $payload = [
+      'email' => $existingMembership->email,
+      'first_name' => $existingMembership->firstName,
+      'last_name' => $existingMembership->lastName,
+      'start_date' => $existingMembership->startDate->format('Y-m-d\TH:i:s\Z'),
+      'expire_date' => $newExpireDate->format('Y-m-d\TH:i:s\Z'),
+      'status' => 'On',
+    ];
 
     $data = $this->requestObject(
       'PUT',
       $this->membershipUrl($membershipId),
-      $updated->toApiPayload(),
+      $payload,
     );
 
     return Membership::fromApiResponse($data);
@@ -131,11 +147,11 @@ class MvaultClient implements MvaultClientInterface {
    * @param array<string, mixed> $payload
    *   The request payload for write operations.
    *
-   * @throws \JsonException
-   *   When the API returns any other error status code.
    * @throws \Drupal\mvault\Exception\MvaultNotFoundException
    *   When the API returns 404.
    * @throws \Drupal\mvault\Exception\MvaultApiException
+   * @throws \JsonException
+   *   When the API returns any other error status code.
    *
    * @return array<string, mixed>
    *   The decoded JSON response as an associative array.
@@ -161,11 +177,11 @@ class MvaultClient implements MvaultClientInterface {
    * @param array<string, mixed> $payload
    *   The request payload for write operations.
    *
-   * @throws \JsonException
    * @throws \Drupal\mvault\Exception\MvaultNotFoundException
    *   When the API returns 404.
    * @throws \Drupal\mvault\Exception\MvaultApiException
    *   When the API returns any other error status code.
+   * @throws \JsonException
    *
    * @return array<int, array<string, mixed>>
    *   The decoded JSON response as a list of associative arrays.
@@ -191,11 +207,11 @@ class MvaultClient implements MvaultClientInterface {
    * @param array<string, mixed> $payload
    *   The request payload for write operations.
    *
-   * @throws \JsonException
    * @throws \Drupal\mvault\Exception\MvaultNotFoundException
    *   When the API returns a 404 status code.
    * @throws \Drupal\mvault\Exception\MvaultApiException
    *   When the API returns any other error status code.
+   * @throws \JsonException
    *
    * @return mixed
    *   The decoded JSON response body.

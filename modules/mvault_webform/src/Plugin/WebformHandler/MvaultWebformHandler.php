@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Drupal\mvault_webform\Plugin\WebformHandler;
 
+use Drupal\webform\Element\WebformName;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\mvault\ValueObject\Membership;
 use Drupal\mvault\Exception\MvaultException;
-use Drupal\webform\Element\WebformName;
 use Drupal\webform\Plugin\WebformHandlerBase;
 use Drupal\Core\Logger\LoggerChannelInterface;
 use Drupal\webform\WebformSubmissionInterface;
@@ -73,6 +73,7 @@ class MvaultWebformHandler extends WebformHandlerBase {
       'membership_id_field' => '',
       'membership_id_pattern' => 'en_{field}',
       'membership_duration_days' => 0,
+      'mvault_status_field' => '',
       'success_message' => 'Your PBS Passport membership has been activated. Thank you!',
       'already_active_message' => 'You already have an active PBS Passport membership and are not eligible for this offer.',
       'error_message' => 'We were unable to process your membership at this time. Please contact support.',
@@ -165,6 +166,15 @@ class MvaultWebformHandler extends WebformHandlerBase {
       '#max' => 3650,
     ];
 
+    $form['membership_settings']['mvault_status_field'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Status tracking field'),
+      '#description' => $this->t('Optional hidden field to record the outcome (created/renewed/active/error).'),
+      '#options' => $element_options,
+      '#empty_option' => $this->t('- None -'),
+      '#default_value' => $this->configuration['mvault_status_field'],
+    ];
+
     $form['messages'] = [
       '#type' => 'details',
       '#title' => $this->t('Messages'),
@@ -229,6 +239,9 @@ class MvaultWebformHandler extends WebformHandlerBase {
     $this->configuration['membership_duration_days'] = (int) $form_state->getValue([
       'membership_duration_days',
     ]);
+    $this->configuration['mvault_status_field'] = (string) $form_state->getValue([
+      'mvault_status_field',
+    ]);
     $this->configuration['success_message'] = $form_state->getValue([
       'success_message',
     ]);
@@ -264,6 +277,11 @@ class MvaultWebformHandler extends WebformHandlerBase {
    * {@inheritdoc}
    */
   public function postSave(WebformSubmissionInterface $webform_submission, $update = TRUE): void {
+    $statusField = $this->configuration['mvault_status_field'] ?? '';
+    if ($statusField !== '' && !empty($webform_submission->getElementData($statusField))) {
+      return;
+    }
+
     $mappings = $this->configuration['field_mappings'] ?? [];
     $emailField = $mappings['email_field'] ?? '';
 
@@ -282,11 +300,15 @@ class MvaultWebformHandler extends WebformHandlerBase {
     $membershipId = $this->formatMembershipId($data);
 
     try {
-      $result = $this->processMembership(
+      [
+        'status' => $mvaultStatus,
+        'membership' => $result,
+      ] = $this->processMembership(
         $extractedFields['email'],
         $membershipId,
         $extractedFields
       );
+      $this->writeStatusToSubmission($webform_submission, $statusField, $mvaultStatus);
       $this->displaySuccessMessage($result);
     }
     catch (MvaultException $e) {
@@ -299,6 +321,7 @@ class MvaultWebformHandler extends WebformHandlerBase {
           'exception' => $e,
         ]
       );
+      $this->writeStatusToSubmission($webform_submission, $statusField, 'error');
       $this->displayConfigMessage('error_message', 'addError');
     }
   }
@@ -326,6 +349,11 @@ class MvaultWebformHandler extends WebformHandlerBase {
   /**
    * Orchestrates the create-or-renew decision for a membership.
    *
+   * Lookup order:
+   *   1. By membership ID (primary)
+   *   2. By email (fallback when ID not found)
+   *   3. Create new when neither lookup finds a record
+   *
    * @param string $email
    *   The member's email address.
    * @param string $membershipId
@@ -333,8 +361,8 @@ class MvaultWebformHandler extends WebformHandlerBase {
    * @param array<string, string> $extractedFields
    *   The mapped field values from the submission.
    *
-   * @return \Drupal\mvault\ValueObject\Membership
-   *   The membership returned by the API after create or renew.
+   * @return array{status: string, membership: \Drupal\mvault\ValueObject\Membership}
+   *   Array with 'status' (created|renewed|active) and 'membership'.
    *
    * @throws \DateMalformedStringException
    * @throws \Drupal\mvault\Exception\MvaultApiException
@@ -345,20 +373,88 @@ class MvaultWebformHandler extends WebformHandlerBase {
     string $email,
     string $membershipId,
     array $extractedFields
-  ): Membership {
-    $activeMembership = $this->mvaultClient->getActiveMembershipByEmail($email);
+  ): array {
+    $expireDate = $this->calculateExpireDate();
 
-    if ($activeMembership !== NULL) {
-      $this->handleActiveMembership($email, $membershipId);
-      return $activeMembership;
+    $membership = $this->mvaultClient->getMembershipById($membershipId);
+
+    if ($membership !== NULL) {
+      return $this->handleFoundMembership($membership, $membershipId, $email, $expireDate);
     }
 
-    $existingMembership = $this->mvaultClient->getMembershipByEmail($email);
-    $membership = $this->createMembership($extractedFields);
+    $membership = $this->mvaultClient->getMembershipByEmail($email);
 
-    return $existingMembership !== NULL
-      ? $this->mvaultClient->renewMembership($membershipId, $membership->expireDate, $existingMembership)
-      : $this->mvaultClient->createMembership($membershipId, $membership);
+    if ($membership !== NULL) {
+      return $this->handleFoundMembership(
+        $membership,
+        $membership->membershipId ?? $membershipId,
+        $email,
+        $expireDate
+      );
+    }
+
+    $newMembership = $this->buildMembership($extractedFields, $expireDate);
+    $created = $this->mvaultClient->createMembership($membershipId, $newMembership);
+
+    return ['status' => 'created', 'membership' => $created];
+  }
+
+  /**
+   * Determines the action to take for an already-known membership.
+   *
+   * @param \Drupal\mvault\ValueObject\Membership $membership
+   *   The membership retrieved from the API.
+   * @param string $membershipId
+   *   The membership ID to use for renewal.
+   * @param string $email
+   *   The member's email address.
+   * @param \DateTimeImmutable $expireDate
+   *   The calculated expiration date for renewal.
+   *
+   * @return array{status: string, membership: \Drupal\mvault\ValueObject\Membership}
+   *   Array with 'status' (active|renewed) and 'membership'.
+   *
+   * @throws \Drupal\mvault\Exception\MvaultApiException
+   * @throws \Drupal\mvault\Exception\MvaultNotFoundException
+   */
+  private function handleFoundMembership(
+    Membership $membership,
+    string $membershipId,
+    string $email,
+    \DateTimeImmutable $expireDate
+  ): array {
+    if ($this->isMembershipActive($membership)) {
+      $this->handleActiveMembership($email, $membershipId);
+      return ['status' => 'active', 'membership' => $membership];
+    }
+
+    $renewed = $this->mvaultClient->renewMembership($membershipId, $expireDate, $membership);
+    return ['status' => 'renewed', 'membership' => $renewed];
+  }
+
+  /**
+   * Returns TRUE when a membership is currently active.
+   *
+   * @param \Drupal\mvault\ValueObject\Membership $membership
+   *   The membership to check.
+   *
+   * @return bool
+   *   TRUE if the membership status is 'On' and has not expired.
+   */
+  private function isMembershipActive(Membership $membership): bool {
+    return $membership->status === 'On' && $membership->expireDate > new \DateTimeImmutable();
+  }
+
+  /**
+   * Calculates the membership expiration date based on configured duration.
+   *
+   * @return \DateTimeImmutable
+   *   The calculated expiration date.
+   */
+  private function calculateExpireDate(): \DateTimeImmutable {
+    $startDate = new \DateTimeImmutable('yesterday');
+    $durationDays = $this->resolveDurationDays();
+    return $startDate->modify(sprintf('+%d days', $durationDays));
   }
 
   /**
@@ -423,16 +519,16 @@ class MvaultWebformHandler extends WebformHandlerBase {
    *
    * @param array<string, string> $extractedFields
    *   The mapped field values from the submission.
+   * @param \DateTimeImmutable $expireDate
+   *   The pre-calculated expiration date.
    *
    * @return \Drupal\mvault\ValueObject\Membership
    *   The membership value object populated from submission data.
-   * @throws \DateMalformedStringException
    */
-  private function createMembership(array $extractedFields): Membership {
+  private function buildMembership(array $extractedFields, \DateTimeImmutable $expireDate): Membership {
     $startDate = new \DateTimeImmutable('yesterday');
-    $durationDays = $this->resolveDurationDays();
-    $expireDate = $startDate->modify(sprintf('+%d days', $durationDays));
-    $offerId = (string) $this->configFactory->get('mvault.settings')->get('default_offer_id');
+    $offerId = (string) $this->configFactory->get('mvault.settings')
+      ->get('default_offer_id');
 
     $additionalMetadata = $extractedFields['libraryId'] !== ''
       ? ['library_id' => $extractedFields['libraryId']]
@@ -447,6 +543,31 @@ class MvaultWebformHandler extends WebformHandlerBase {
       expireDate: $expireDate,
       additionalMetadata: $additionalMetadata,
     );
+  }
+
+  /**
+   * Writes the MVault processing status to the webform submission.
+   *
+   * @param \Drupal\webform\WebformSubmissionInterface $webform_submission
+   *   The webform submission to update.
+   * @param string $statusField
+   *   The field key to write the status to. No-op when empty.
+   * @param string $status
+   *   The status value to write.
+   */
+  private function writeStatusToSubmission(
+    WebformSubmissionInterface $webform_submission,
+    string $statusField,
+    string $status
+  ): void {
+    if ($statusField === '') {
+      return;
+    }
+
+    $data = $webform_submission->getData();
+    $data[$statusField] = $status;
+    $webform_submission->setData($data);
+    $webform_submission->resave();
   }
 
   /**

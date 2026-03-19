@@ -84,6 +84,7 @@ class MvaultWebformHandlerTest extends KernelTestBase {
         ],
         'membership_id_pattern' => 'lib_{field}',
         'membership_duration_days' => 730,
+        'mvault_status_field' => 'mvault_status',
         'success_message' => 'Membership activated!',
         'already_active_message' => 'Already active.',
         'error_message' => 'An error occurred.',
@@ -109,6 +110,7 @@ class MvaultWebformHandlerTest extends KernelTestBase {
     $this->assertSame('supporter_id', $settings['membership_id_field']);
     $this->assertSame('email', $settings['field_mappings']['email_field']);
     $this->assertSame('Membership activated!', $settings['success_message']);
+    $this->assertSame('mvault_status', $settings['mvault_status_field']);
   }
 
   // -------------------------------------------------------------------------
@@ -117,16 +119,22 @@ class MvaultWebformHandlerTest extends KernelTestBase {
 
   /**
    * Tests that postSave() calls createMembership() when no existing membership.
+   *
+   * The handler first looks up by membership ID (primary), then by email
+   * (fallback). When both return null it must call createMembership().
    */
   public function testPostSaveCallsCreateMembershipWhenNoExistingMembership(): void {
     $createdMembership = $this->buildMembershipFixture('en_sup-001', 'abc-token-123');
 
     $mockClient = $this->createMock(MvaultClientInterface::class);
+
+    // Primary lookup by membership ID — not found.
     $mockClient->expects($this->once())
-      ->method('getActiveMembershipByEmail')
-      ->with('jane@example.com')
+      ->method('getMembershipById')
+      ->with('en_sup-001')
       ->willReturn(NULL);
 
+    // Email fallback — also not found.
     $mockClient->expects($this->once())
       ->method('getMembershipByEmail')
       ->with('jane@example.com')
@@ -160,16 +168,28 @@ class MvaultWebformHandlerTest extends KernelTestBase {
   // -------------------------------------------------------------------------
 
   /**
-   * Tests that postSave() skips creation when an active membership is found.
+   * Tests that postSave() skips creation when an active membership is found by
+   * membership ID.
+   *
+   * When getMembershipById() returns a membership with status 'On' and a future
+   * expiry date, the handler must not call createMembership() or
+   * renewMembership(). The email fallback is also not called because the
+   * primary lookup already found a record.
    */
   public function testPostSaveSkipsCreationWhenActiveMembershipExists(): void {
-    $activeMembership = $this->buildMembershipFixture('existing-mem', NULL);
+    // Active membership: status 'On' with a future expiry date.
+    $activeMembership = $this->buildActiveMembershipFixture('existing-mem');
 
     $mockClient = $this->createMock(MvaultClientInterface::class);
+
+    // Found by membership ID — no email fallback needed.
     $mockClient->expects($this->once())
-      ->method('getActiveMembershipByEmail')
-      ->with('active@example.com')
+      ->method('getMembershipById')
+      ->with('en_sup-active')
       ->willReturn($activeMembership);
+
+    $mockClient->expects($this->never())
+      ->method('getMembershipByEmail');
 
     $mockClient->expects($this->never())
       ->method('createMembership');
@@ -200,22 +220,28 @@ class MvaultWebformHandlerTest extends KernelTestBase {
   // -------------------------------------------------------------------------
 
   /**
-   * Tests that postSave() calls renewMembership() when an expired membership exists.
+   * Tests that postSave() calls renewMembership() when getMembershipById()
+   * returns an expired membership.
+   *
+   * When the primary ID lookup finds an inactive record (status 'Off'), the
+   * handler must call renewMembership() with the same membership ID and a
+   * DateTimeImmutable expiry — no createMembership() call.
    */
   public function testPostSaveCallsRenewMembershipWhenExpiredMembershipExists(): void {
-    $expiredMembership = $this->buildMembershipFixture('exp-mem-001', NULL);
-    $renewedMembership = $this->buildMembershipFixture('exp-mem-001', NULL);
+    $expiredMembership = $this->buildExpiredMembershipFixture('en_sup-expired');
+    $renewedMembership = $this->buildMembershipFixture('en_sup-expired', NULL);
 
     $mockClient = $this->createMock(MvaultClientInterface::class);
-    $mockClient->expects($this->once())
-      ->method('getActiveMembershipByEmail')
-      ->with('expired@example.com')
-      ->willReturn(NULL);
 
+    // Primary lookup by membership ID returns the expired membership.
     $mockClient->expects($this->once())
-      ->method('getMembershipByEmail')
-      ->with('expired@example.com')
+      ->method('getMembershipById')
+      ->with('en_sup-expired')
       ->willReturn($expiredMembership);
+
+    // No email fallback because the primary lookup found a record.
+    $mockClient->expects($this->never())
+      ->method('getMembershipByEmail');
 
     $mockClient->expects($this->never())
       ->method('createMembership');
@@ -241,6 +267,61 @@ class MvaultWebformHandlerTest extends KernelTestBase {
   }
 
   // -------------------------------------------------------------------------
+  // postSave() — email fallback renewal scenario
+  // -------------------------------------------------------------------------
+
+  /**
+   * Tests that postSave() calls renewMembership() using the membership's own
+   * ID when the email fallback finds an expired membership.
+   *
+   * When getMembershipById() returns null but getMembershipByEmail() returns an
+   * existing (expired) record, the handler must use the membership's own ID
+   * (not the form-derived ID) for the renewMembership() call.
+   */
+  public function testPostSaveCallsRenewMembershipWhenEmailFallbackFindsExpiredMembership(): void {
+    // Expired membership discovered via email — it has its own ID.
+    $expiredMembership = $this->buildExpiredMembershipFixture('en_existing-123');
+    $renewedMembership = $this->buildMembershipFixture('en_existing-123', NULL);
+
+    $mockClient = $this->createMock(MvaultClientInterface::class);
+
+    // Primary lookup by membership ID — not found.
+    $mockClient->expects($this->once())
+      ->method('getMembershipById')
+      ->with('en_sup-new')
+      ->willReturn(NULL);
+
+    // Email fallback finds the existing expired membership.
+    $mockClient->expects($this->once())
+      ->method('getMembershipByEmail')
+      ->with('fallback@example.com')
+      ->willReturn($expiredMembership);
+
+    $mockClient->expects($this->never())
+      ->method('createMembership');
+
+    // Must renew using the existing membership's own ID, not 'en_sup-new'.
+    $mockClient->expects($this->once())
+      ->method('renewMembership')
+      ->with(
+        $this->identicalTo('en_existing-123'),
+        $this->isInstanceOf(\DateTimeImmutable::class),
+        $this->isInstanceOf(Membership::class),
+      )
+      ->willReturn($renewedMembership);
+
+    $this->container->set('mvault.client', $mockClient);
+
+    $webform = $this->createHandlerWebform();
+    $this->submitWebform($webform, [
+      'email' => 'fallback@example.com',
+      'first_name' => 'Fallback',
+      'last_name' => 'User',
+      'supporter_id' => 'sup-new',
+    ]);
+  }
+
+  // -------------------------------------------------------------------------
   // postSave() — error handling
   // -------------------------------------------------------------------------
 
@@ -251,7 +332,7 @@ class MvaultWebformHandlerTest extends KernelTestBase {
    */
   public function testPostSaveDoesNotPropagateApiException(): void {
     $mockClient = $this->createMock(MvaultClientInterface::class);
-    $mockClient->method('getActiveMembershipByEmail')
+    $mockClient->method('getMembershipById')
       ->willThrowException(new MvaultApiException(
         message: 'MVault API returned HTTP 503',
         statusCode: 503,
@@ -278,7 +359,7 @@ class MvaultWebformHandlerTest extends KernelTestBase {
    */
   public function testPostSaveDisplaysErrorMessageWhenApiThrows(): void {
     $mockClient = $this->createMock(MvaultClientInterface::class);
-    $mockClient->method('getActiveMembershipByEmail')
+    $mockClient->method('getMembershipById')
       ->willThrowException(new MvaultApiException(
         message: 'MVault API returned HTTP 500',
         statusCode: 500,
@@ -304,6 +385,80 @@ class MvaultWebformHandlerTest extends KernelTestBase {
   }
 
   // -------------------------------------------------------------------------
+  // postSave() — status field tracking
+  // -------------------------------------------------------------------------
+
+  /**
+   * Tests that postSave() writes 'created' to the status field after a
+   * successful membership creation.
+   *
+   * When the handler is configured with a status tracking field and
+   * createMembership() succeeds, the submission must be resaved with
+   * the outcome value in that field.
+   */
+  public function testPostSaveWritesStatusFieldOnCreate(): void {
+    $createdMembership = $this->buildMembershipFixture('en_sup-status', NULL);
+
+    $mockClient = $this->createMock(MvaultClientInterface::class);
+    $mockClient->method('getMembershipById')->willReturn(NULL);
+    $mockClient->method('getMembershipByEmail')->willReturn(NULL);
+    $mockClient->method('createMembership')->willReturn($createdMembership);
+
+    $this->container->set('mvault.client', $mockClient);
+
+    $webform = $this->createHandlerWebformWithStatusField();
+    $submission = $this->submitWebform($webform, [
+      'email' => 'status@example.com',
+      'first_name' => 'Status',
+      'last_name' => 'User',
+      'supporter_id' => 'sup-status',
+      'mvault_status' => '',
+    ]);
+
+    // Reload the submission to pick up the resaved data.
+    $reloaded = WebformSubmission::load($submission->id());
+    $this->assertNotNull($reloaded, 'Submission must be loadable after postSave().');
+
+    $this->assertSame(
+      'created',
+      $reloaded->getElementData('mvault_status'),
+      'The status field must contain "created" after a successful membership creation.',
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // postSave() — re-fire guard
+  // -------------------------------------------------------------------------
+
+  /**
+   * Tests that postSave() returns early without calling the API when the
+   * status field already contains a value.
+   *
+   * This prevents duplicate API calls when the submission is resaved (e.g.,
+   * by writeStatusToSubmission() itself or any other re-trigger).
+   */
+  public function testPostSaveSkipsProcessingWhenStatusFieldAlreadySet(): void {
+    $mockClient = $this->createMock(MvaultClientInterface::class);
+    $mockClient->expects($this->never())->method('getMembershipById');
+    $mockClient->expects($this->never())->method('getMembershipByEmail');
+    $mockClient->expects($this->never())->method('createMembership');
+    $mockClient->expects($this->never())->method('renewMembership');
+
+    $this->container->set('mvault.client', $mockClient);
+
+    $webform = $this->createHandlerWebformWithStatusField();
+
+    // Submit with the status field already populated — simulates a re-fire.
+    $this->submitWebform($webform, [
+      'email' => 'guard@example.com',
+      'first_name' => 'Guard',
+      'last_name' => 'User',
+      'supporter_id' => 'sup-guard',
+      'mvault_status' => 'created',
+    ]);
+  }
+
+  // -------------------------------------------------------------------------
   // postSave() — regression: corrupted configuration safeguards
   // -------------------------------------------------------------------------
 
@@ -316,7 +471,7 @@ class MvaultWebformHandlerTest extends KernelTestBase {
    */
   public function testPostSaveHandlesNullFieldMappingsGracefully(): void {
     $mockClient = $this->createMock(MvaultClientInterface::class);
-    $mockClient->expects($this->never())->method('getActiveMembershipByEmail');
+    $mockClient->expects($this->never())->method('getMembershipById');
     $mockClient->expects($this->never())->method('getMembershipByEmail');
     $mockClient->expects($this->never())->method('createMembership');
     $mockClient->expects($this->never())->method('renewMembership');
@@ -347,7 +502,7 @@ class MvaultWebformHandlerTest extends KernelTestBase {
    */
   public function testPostSaveHandlesNullEmailFieldGracefully(): void {
     $mockClient = $this->createMock(MvaultClientInterface::class);
-    $mockClient->expects($this->never())->method('getActiveMembershipByEmail');
+    $mockClient->expects($this->never())->method('getMembershipById');
     $mockClient->expects($this->never())->method('getMembershipByEmail');
     $mockClient->expects($this->never())->method('createMembership');
     $mockClient->expects($this->never())->method('renewMembership');
@@ -417,6 +572,49 @@ class MvaultWebformHandlerTest extends KernelTestBase {
   }
 
   /**
+   * Creates a minimal webform that includes a hidden mvault_status element.
+   *
+   * Used for tests that exercise status field tracking and the re-fire guard.
+   *
+   * @return \Drupal\webform\WebformInterface
+   *   The saved webform entity.
+   */
+  private function createTestWebformWithStatusField(): WebformInterface {
+    /** @var \Drupal\webform\WebformInterface $webform */
+    $webform = Webform::create([
+      'id' => 'test_mvault_' . $this->randomMachineName(8),
+      'title' => 'Test MVault Webform with Status',
+    ]);
+
+    $webform->setElements([
+      'email' => [
+        '#type' => 'email',
+        '#title' => 'Email',
+      ],
+      'first_name' => [
+        '#type' => 'textfield',
+        '#title' => 'First name',
+      ],
+      'last_name' => [
+        '#type' => 'textfield',
+        '#title' => 'Last name',
+      ],
+      'supporter_id' => [
+        '#type' => 'textfield',
+        '#title' => 'Supporter ID',
+      ],
+      'mvault_status' => [
+        '#type' => 'hidden',
+        '#title' => 'MVault Status',
+      ],
+    ]);
+
+    $webform->save();
+
+    return $webform;
+  }
+
+  /**
    * Creates a webform with the MVault handler attached and configured.
    *
    * The handler uses `en_{field}` as the membership ID pattern and maps
@@ -450,6 +648,56 @@ class MvaultWebformHandlerTest extends KernelTestBase {
         ],
         'membership_id_pattern' => 'en_{field}',
         'membership_duration_days' => 365,
+        'mvault_status_field' => '',
+        'success_message' => 'Your PBS Passport membership has been activated. Thank you!',
+        'already_active_message' => 'You already have an active PBS Passport membership and are not eligible for this offer.',
+        'error_message' => 'We were unable to process your membership at this time. Please contact support.',
+      ],
+    ]);
+
+    $handler->setWebform($webform);
+    $webform->addWebformHandler($handler);
+    $webform->save();
+
+    return $webform;
+  }
+
+  /**
+   * Creates a webform with the MVault handler configured with status tracking.
+   *
+   * Identical to createHandlerWebform() but the underlying webform includes a
+   * hidden `mvault_status` element and the handler's `mvault_status_field` is
+   * set to `'mvault_status'`.
+   *
+   * @return \Drupal\webform\WebformInterface
+   *   The saved webform entity with the MVault handler and status field.
+   */
+  private function createHandlerWebformWithStatusField(): WebformInterface {
+    $webform = $this->createTestWebformWithStatusField();
+
+    /** @var \Drupal\webform\Plugin\WebformHandlerManagerInterface $handler_manager */
+    $handler_manager = $this->container->get('plugin.manager.webform.handler');
+
+    /** @var \Drupal\mvault_webform\Plugin\WebformHandler\MvaultWebformHandler $handler */
+    $handler = $handler_manager->createInstance('mvault_membership', [
+      'id' => 'mvault_membership',
+      'handler_id' => 'mvault_membership',
+      'label' => 'MVault Membership',
+      'notes' => '',
+      'status' => 1,
+      'conditions' => [],
+      'weight' => 0,
+      'settings' => [
+        'membership_id_field' => 'supporter_id',
+        'field_mappings' => [
+          'first_name_field' => 'first_name',
+          'last_name_field' => 'last_name',
+          'email_field' => 'email',
+          'library_id_field' => '',
+        ],
+        'membership_id_pattern' => 'en_{field}',
+        'membership_duration_days' => 365,
+        'mvault_status_field' => 'mvault_status',
         'success_message' => 'Your PBS Passport membership has been activated. Thank you!',
         'already_active_message' => 'You already have an active PBS Passport membership and are not eligible for this offer.',
         'error_message' => 'We were unable to process your membership at this time. Please contact support.',
@@ -519,6 +767,7 @@ class MvaultWebformHandlerTest extends KernelTestBase {
         'field_mappings' => $fieldMappings,
         'membership_id_pattern' => 'en_{field}',
         'membership_duration_days' => 365,
+        'mvault_status_field' => '',
         'success_message' => 'Your PBS Passport membership has been activated. Thank you!',
         'already_active_message' => 'You already have an active PBS Passport membership and are not eligible for this offer.',
         'error_message' => 'We were unable to process your membership at this time. Please contact support.',
@@ -534,6 +783,8 @@ class MvaultWebformHandlerTest extends KernelTestBase {
 
   /**
    * Builds a Membership value object for use as a mock return value.
+   *
+   * Returns a membership with status 'On' and a future expiry date by default.
    *
    * @param string $membershipId
    *   The membership ID.
@@ -554,6 +805,58 @@ class MvaultWebformHandlerTest extends KernelTestBase {
       membershipId: $membershipId,
       status: 'On',
       token: $token,
+    );
+  }
+
+  /**
+   * Builds an active Membership fixture with status 'On' and a future expiry.
+   *
+   * The handler's isMembershipActive() check requires status === 'On' AND
+   * expireDate in the future.
+   *
+   * @param string $membershipId
+   *   The membership ID.
+   *
+   * @return \Drupal\mvault\ValueObject\Membership
+   *   An active Membership value object.
+   */
+  private function buildActiveMembershipFixture(string $membershipId): Membership {
+    return new Membership(
+      firstName: 'Active',
+      lastName: 'User',
+      email: 'active@example.com',
+      offer: 'OFFER-001',
+      startDate: new \DateTimeImmutable('yesterday'),
+      expireDate: new \DateTimeImmutable('+1 year'),
+      membershipId: $membershipId,
+      status: 'On',
+      token: NULL,
+    );
+  }
+
+  /**
+   * Builds an expired Membership fixture with status 'Off'.
+   *
+   * The handler's isMembershipActive() returns false for status !== 'On', so
+   * the handler will call renewMembership() on this membership.
+   *
+   * @param string $membershipId
+   *   The membership ID.
+   *
+   * @return \Drupal\mvault\ValueObject\Membership
+   *   An expired Membership value object.
+   */
+  private function buildExpiredMembershipFixture(string $membershipId): Membership {
+    return new Membership(
+      firstName: 'Expired',
+      lastName: 'User',
+      email: 'expired@example.com',
+      offer: 'OFFER-001',
+      startDate: new \DateTimeImmutable('-2 years'),
+      expireDate: new \DateTimeImmutable('-1 year'),
+      membershipId: $membershipId,
+      status: 'Off',
+      token: NULL,
     );
   }
 

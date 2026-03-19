@@ -201,7 +201,7 @@ class MvaultClientTest extends UnitTestCase {
     $this->httpClient->expects($this->once())
       ->method('request')
       ->with('GET', $expectedUrl, $this->anything())
-      ->willReturn($this->buildJsonResponse($this->membershipApiFixture()));
+      ->willReturn($this->buildJsonResponse(['objects' => [$this->membershipApiFixture()]]));
 
     $this->client->getMembershipByEmail($email);
   }
@@ -211,7 +211,7 @@ class MvaultClientTest extends UnitTestCase {
    */
   public function testGetMembershipByEmailReturnsMembershipOn200Response(): void {
     $this->httpClient->method('request')
-      ->willReturn($this->buildJsonResponse($this->membershipApiFixture()));
+      ->willReturn($this->buildJsonResponse(['objects' => [$this->membershipApiFixture()]]));
 
     $result = $this->client->getMembershipByEmail('jane@example.com');
 
@@ -316,6 +316,61 @@ class MvaultClientTest extends UnitTestCase {
   }
 
   // ---------------------------------------------------------------------------
+  // getMembershipById() tests
+  // ---------------------------------------------------------------------------
+
+  /**
+   * @covers ::getMembershipById
+   */
+  public function testGetMembershipByIdSendsGetRequestToMembershipUrl(): void {
+    $membershipId = 'en_12345';
+    $expectedUrl = self::BASE_URL . '/' . self::STATION_ID . '/memberships/' . $membershipId . '/';
+
+    $this->httpClient->expects($this->once())
+      ->method('request')
+      ->with('GET', $expectedUrl, $this->anything())
+      ->willReturn($this->buildJsonResponse($this->membershipApiFixture()));
+
+    $this->client->getMembershipById($membershipId);
+  }
+
+  /**
+   * @covers ::getMembershipById
+   */
+  public function testGetMembershipByIdReturnsMembershipOn200Response(): void {
+    $this->httpClient->method('request')
+      ->willReturn($this->buildJsonResponse($this->membershipApiFixture()));
+
+    $result = $this->client->getMembershipById('en_12345');
+
+    $this->assertInstanceOf(Membership::class, $result);
+    $this->assertSame('en_12345', $result->membershipId);
+  }
+
+  /**
+   * @covers ::getMembershipById
+   */
+  public function testGetMembershipByIdReturnsNullOn404Response(): void {
+    $this->httpClient->method('request')
+      ->willThrowException($this->build404Exception());
+
+    $result = $this->client->getMembershipById('en_unknown');
+
+    $this->assertNull($result);
+  }
+
+  /**
+   * @covers ::getMembershipById
+   */
+  public function testGetMembershipByIdThrowsMvaultApiExceptionOn500Response(): void {
+    $this->httpClient->method('request')
+      ->willThrowException($this->build500Exception());
+
+    $this->expectException(MvaultApiException::class);
+    $this->client->getMembershipById('en_12345');
+  }
+
+  // ---------------------------------------------------------------------------
   // renewMembership() tests
   // ---------------------------------------------------------------------------
 
@@ -331,9 +386,8 @@ class MvaultClientTest extends UnitTestCase {
       ->with('PUT', $expectedUrl, $this->anything())
       ->willReturn($this->buildJsonResponse($this->membershipApiFixture()));
 
-    $existing = $this->buildMembership(membershipId: $membershipId);
     $newExpireDate = new \DateTimeImmutable('2027-01-01T00:00:00Z');
-    $this->client->renewMembership($membershipId, $newExpireDate, $existing);
+    $this->client->renewMembership($membershipId, $newExpireDate, $this->buildMembership());
   }
 
   /**
@@ -343,9 +397,8 @@ class MvaultClientTest extends UnitTestCase {
     $this->httpClient->method('request')
       ->willReturn($this->buildJsonResponse($this->membershipApiFixture()));
 
-    $existing = $this->buildMembership(membershipId: 'en_12345');
     $newExpireDate = new \DateTimeImmutable('2027-01-01T00:00:00Z');
-    $result = $this->client->renewMembership('en_12345', $newExpireDate, $existing);
+    $result = $this->client->renewMembership('en_12345', $newExpireDate, $this->buildMembership());
 
     $this->assertSame('Jane', $result->firstName);
   }
@@ -353,7 +406,7 @@ class MvaultClientTest extends UnitTestCase {
   /**
    * @covers ::renewMembership
    */
-  public function testRenewMembershipSendsNewExpireDateInPayload(): void {
+  public function testRenewMembershipSendsRequiredFieldsInPayload(): void {
     $capturedOptions = [];
     $this->httpClient->method('request')
       ->willReturnCallback(function (string $method, string $url, array $options) use (&$capturedOptions) {
@@ -361,11 +414,24 @@ class MvaultClientTest extends UnitTestCase {
         return $this->buildJsonResponse($this->membershipApiFixture());
       });
 
-    $existing = $this->buildMembership(membershipId: 'en_12345');
+    $existingMembership = $this->buildMembership(
+      startDate: new \DateTimeImmutable('2025-01-01T00:00:00Z'),
+    );
     $newExpireDate = new \DateTimeImmutable('2027-06-15T00:00:00Z');
-    $this->client->renewMembership('en_12345', $newExpireDate, $existing);
+    $this->client->renewMembership('en_12345', $newExpireDate, $existingMembership);
 
-    $this->assertSame('2027-06-15T00:00:00Z', $capturedOptions['json']['expire_date']);
+    $json = $capturedOptions['json'];
+    $this->assertSame('Jane', $json['first_name']);
+    $this->assertSame('Doe', $json['last_name']);
+    $this->assertSame('2025-01-01T00:00:00Z', $json['start_date']);
+    $this->assertSame('2027-06-15T00:00:00Z', $json['expire_date']);
+    $this->assertSame('On', $json['status']);
+    $this->assertSame('jane@example.com', $json['email']);
+    $this->assertArrayNotHasKey('offer', $json);
+    $this->assertArrayNotHasKey('membership_id', $json);
+    $this->assertArrayNotHasKey('token', $json);
+    $this->assertArrayNotHasKey('create_date', $json);
+    $this->assertArrayNotHasKey('additional_metadata', $json);
   }
 
   /**
@@ -377,9 +443,8 @@ class MvaultClientTest extends UnitTestCase {
 
     $this->expectException(MvaultNotFoundException::class);
 
-    $existing = $this->buildMembership(membershipId: 'en_12345');
     $newExpireDate = new \DateTimeImmutable('2027-01-01T00:00:00Z');
-    $this->client->renewMembership('en_12345', $newExpireDate, $existing);
+    $this->client->renewMembership('en_12345', $newExpireDate, $this->buildMembership());
   }
 
   // ---------------------------------------------------------------------------
