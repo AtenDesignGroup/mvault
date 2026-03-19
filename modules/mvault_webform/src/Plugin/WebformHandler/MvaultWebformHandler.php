@@ -483,7 +483,7 @@ class MvaultWebformHandler extends WebformHandlerBase {
    */
   private function displaySuccessMessage(Membership $membership): void {
     if ($membership->token !== NULL && $membership->token !== '') {
-      $activationUrl = 'https://www.pbs.org/passport/activate/?token=' . $membership->token;
+      $activationUrl = 'https://video.pbs.org/plus/activate/' . $membership->token;
       $this->messenger()->addStatus($this->t(
         'Your PBS Passport membership has been activated. <a href="@url">Click here to activate your account</a>.',
         ['@url' => $activationUrl],
