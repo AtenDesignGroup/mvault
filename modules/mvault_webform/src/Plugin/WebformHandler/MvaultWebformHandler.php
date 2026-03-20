@@ -309,7 +309,9 @@ class MvaultWebformHandler extends WebformHandlerBase {
         $extractedFields
       );
       $this->writeStatusToSubmission($webform_submission, $statusField, $mvaultStatus);
-      $this->displaySuccessMessage($result);
+      if ($mvaultStatus !== 'active') {
+        $this->displaySuccessMessage($result);
+      }
     }
     catch (MvaultException $e) {
       $this->logger()->error(
