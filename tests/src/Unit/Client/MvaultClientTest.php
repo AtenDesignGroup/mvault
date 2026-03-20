@@ -106,7 +106,7 @@ class MvaultClientTest extends UnitTestCase {
         return $this->buildJsonResponse($this->membershipApiFixture());
       });
 
-    $membership = $this->buildMembership(additionalMetadata: ['library_id' => 'LIB-001']);
+    $membership = $this->buildMembership(additionalMetadata: '{"library_id":"LIB-001"}');
     $this->client->createMembership('en_12345', $membership);
 
     $json = $capturedOptions['json'];
@@ -427,11 +427,11 @@ class MvaultClientTest extends UnitTestCase {
     $this->assertSame('2027-06-15T00:00:00Z', $json['expire_date']);
     $this->assertSame('On', $json['status']);
     $this->assertSame('jane@example.com', $json['email']);
-    $this->assertArrayNotHasKey('offer', $json);
+    $this->assertSame('PASSPORT_MONTHLY', $json['offer']);
+    $this->assertArrayHasKey('additional_metadata', $json);
     $this->assertArrayNotHasKey('membership_id', $json);
     $this->assertArrayNotHasKey('token', $json);
     $this->assertArrayNotHasKey('create_date', $json);
-    $this->assertArrayNotHasKey('additional_metadata', $json);
   }
 
   /**
@@ -870,8 +870,8 @@ class MvaultClientTest extends UnitTestCase {
    *   Membership ID.
    * @param string|null $token
    *   Activation token.
-   * @param array<string, mixed>|null $additionalMetadata
-   *   Additional metadata.
+   * @param string|null $additionalMetadata
+   *   Additional metadata as a JSON string.
    *
    * @return \Drupal\mvault\ValueObject\Membership
    *   The membership.
@@ -885,7 +885,7 @@ class MvaultClientTest extends UnitTestCase {
     ?\DateTimeImmutable $expireDate = NULL,
     ?string $membershipId = NULL,
     ?string $token = NULL,
-    ?array $additionalMetadata = NULL,
+    ?string $additionalMetadata = NULL,
   ): Membership {
     return new Membership(
       firstName: $firstName,

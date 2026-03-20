@@ -8,6 +8,7 @@ namespace Drupal\mvault\ValueObject;
  * Value object representing a PBS MVault membership.
  */
 final readonly class Membership {
+
   /**
    * Constructs a Membership value object.
    *
@@ -29,8 +30,8 @@ final readonly class Membership {
    *   The membership status (e.g., 'On', 'Off').
    * @param string|null $token
    *   The activation token (read-only, returned by API).
-   * @param array<string, mixed>|null $additionalMetadata
-   *   Additional metadata key-value pairs.
+   * @param string|null $additionalMetadata
+   *   Additional metadata as a JSON string.
    */
   public function __construct(
     public string $firstName,
@@ -42,9 +43,8 @@ final readonly class Membership {
     public ?string $membershipId = NULL,
     public ?string $status = 'On',
     public ?string $token = NULL,
-    public ?array $additionalMetadata = NULL,
-  ) {
-  }
+    public ?string $additionalMetadata = NULL,
+  ) {}
 
   /**
    * Creates a Membership instance from an MVault API response array.
@@ -52,10 +52,10 @@ final readonly class Membership {
    * @param array<string, mixed> $data
    *   The API response data.
    *
-   * @throws \DateMalformedStringException
-   *
    * @return self
    *   A new Membership instance populated from the API response.
+   *
+   * @throws \DateMalformedStringException
    */
   public static function fromApiResponse(array $data): self {
     return new self(
@@ -68,8 +68,8 @@ final readonly class Membership {
       membershipId: isset($data['membership_id']) ? (string) $data['membership_id'] : NULL,
       status: isset($data['status']) ? (string) $data['status'] : 'On',
       token: isset($data['token']) ? (string) $data['token'] : NULL,
-      additionalMetadata: isset($data['additional_metadata']) && is_array($data['additional_metadata'])
-        ? $data['additional_metadata']
+      additionalMetadata: isset($data['additional_metadata'])
+        ? (string) $data['additional_metadata']
         : NULL,
     );
   }
@@ -107,11 +107,11 @@ final readonly class Membership {
    * @param string|null $value
    *   The date string to parse, or null.
    *
-   * @throws \DateMalformedStringException
-   *
    * @return \DateTimeImmutable
    *   A DateTimeImmutable instance, defaulting to epoch if value is null or
    *   invalid.
+   * @throws \DateMalformedStringException
+   *
    */
   private static function parseDateField(?string $value): \DateTimeImmutable {
     if ($value === NULL || $value === '') {
@@ -125,4 +125,5 @@ final readonly class Membership {
 
     return $date;
   }
+
 }

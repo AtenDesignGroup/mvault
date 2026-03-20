@@ -30,7 +30,7 @@ class MembershipTest extends UnitTestCase {
     'expire_date' => '2026-01-01T00:00:00Z',
     'status' => 'On',
     'token' => 'abc-token-xyz',
-    'additional_metadata' => ['library_id' => 'LIB-001'],
+    'additional_metadata' => '{"library_id":"LIB-001"}',
   ];
 
   // ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ class MembershipTest extends UnitTestCase {
   public function testFromApiResponseMapsAdditionalMetadata(): void {
     $membership = Membership::fromApiResponse(self::FULL_API_RESPONSE);
 
-    $this->assertSame(['library_id' => 'LIB-001'], $membership->additionalMetadata);
+    $this->assertSame('{"library_id":"LIB-001"}', $membership->additionalMetadata);
   }
 
   /**
@@ -217,13 +217,13 @@ class MembershipTest extends UnitTestCase {
   /**
    * @covers ::fromApiResponse
    */
-  public function testFromApiResponseIgnoresNonArrayAdditionalMetadata(): void {
+  public function testFromApiResponseStoresStringAdditionalMetadata(): void {
     $data = self::FULL_API_RESPONSE;
-    $data['additional_metadata'] = 'not-an-array';
+    $data['additional_metadata'] = 'some-string-value';
 
     $membership = Membership::fromApiResponse($data);
 
-    $this->assertNull($membership->additionalMetadata);
+    $this->assertSame('some-string-value', $membership->additionalMetadata);
   }
 
   // ---------------------------------------------------------------------------
@@ -346,11 +346,11 @@ class MembershipTest extends UnitTestCase {
    * @covers ::toApiPayload
    */
   public function testToApiPayloadIncludesAdditionalMetadataWhenPresent(): void {
-    $membership = $this->buildMembership(additionalMetadata: ['library_id' => 'LIB-001']);
+    $membership = $this->buildMembership(additionalMetadata: '{"library_id":"LIB-001"}');
 
     $payload = $membership->toApiPayload();
 
-    $this->assertSame(['library_id' => 'LIB-001'], $payload['additional_metadata']);
+    $this->assertSame('{"library_id":"LIB-001"}', $payload['additional_metadata']);
   }
 
   /**
@@ -389,8 +389,8 @@ class MembershipTest extends UnitTestCase {
    *   Membership status.
    * @param string|null $token
    *   Activation token.
-   * @param array<string, mixed>|null $additionalMetadata
-   *   Additional metadata.
+   * @param string|null $additionalMetadata
+   *   Additional metadata as a JSON string.
    *
    * @return \Drupal\mvault\ValueObject\Membership
    *   The constructed membership.
@@ -405,7 +405,7 @@ class MembershipTest extends UnitTestCase {
     ?string $membershipId = NULL,
     ?string $status = 'On',
     ?string $token = NULL,
-    ?array $additionalMetadata = NULL,
+    ?string $additionalMetadata = NULL,
   ): Membership {
     return new Membership(
       firstName: $firstName,

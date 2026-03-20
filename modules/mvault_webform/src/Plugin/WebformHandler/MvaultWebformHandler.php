@@ -533,7 +533,7 @@ class MvaultWebformHandler extends WebformHandlerBase {
       ->get('default_offer_id');
 
     $additionalMetadata = $extractedFields['libraryId'] !== ''
-      ? ['library_id' => $extractedFields['libraryId']]
+      ? json_encode(['library_id' => $extractedFields['libraryId']])
       : NULL;
 
     return new Membership(
