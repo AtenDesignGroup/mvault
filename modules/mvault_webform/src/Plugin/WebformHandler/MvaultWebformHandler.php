@@ -326,9 +326,6 @@ class MvaultWebformHandler extends WebformHandlerBase {
         $statusField => $mvaultStatus,
         $activationCodeField => ($result->token ?? ''),
       ]);
-      if ($mvaultStatus !== 'active') {
-        $this->displaySuccessMessage($result);
-      }
     }
     catch (MvaultException $e) {
       $this->logger()->error(
@@ -343,7 +340,6 @@ class MvaultWebformHandler extends WebformHandlerBase {
       $this->writeFieldsToSubmission($webform_submission, [
         $statusField => 'error',
       ]);
-      $this->displayConfigMessage('error_message', 'addError');
     }
   }
 
@@ -493,29 +489,30 @@ class MvaultWebformHandler extends WebformHandlerBase {
       'MVault: active membership found for @email (id: @id), skipping creation.',
       ['@email' => $email, '@id' => $membershipId],
     );
-
-    $this->displayConfigMessage('already_active_message', 'addWarning');
   }
+
 
   /**
-   * Displays the appropriate success message after creating or renewing a
-   * membership.
-   *
-   * @param \Drupal\mvault\ValueObject\Membership $membership
-   *   The membership returned by the API.
+   * {@inheritdoc}
    */
-  private function displaySuccessMessage(Membership $membership): void {
-    if ($membership->token !== NULL && $membership->token !== '') {
-      $activationUrl = 'https://video.pbs.org/plus/activate/' . $membership->token;
-      $this->messenger()->addStatus($this->t(
-        'Your PBS Passport membership has been activated. <a href="@url">Click here to activate your account</a>.',
-        ['@url' => $activationUrl],
-      ));
-      return;
+  public function preprocessConfirmation(array &$variables) {
+    // Swap out the confirmation message if there's an issue.
+    $webform_submission = $variables['webform_submission'];
+    $message = $variables['message'];
+    $data = $webform_submission->getData();
+    $mvault_status = $data['mvault_status'];
+
+    if ($mvault_status == 'active') {
+      $message['#markup'] = $this->configuration['already_active_message'];
+      $variables['message'] = $message;
+    }
+    elseif ($mvault_status == 'error') {
+      $message['#markup'] = $this->configuration['error_message'];
+      $variables['message'] = $message;
     }
 
-    $this->displayConfigMessage('success_message', 'addStatus');
   }
+
 
   /**
    * Extracts all mapped field values from submission data in a single pass.
@@ -660,20 +657,6 @@ class MvaultWebformHandler extends WebformHandlerBase {
     return $this->loggerFactory->get('mvault_webform');
   }
 
-  /**
-   * Displays a messenger message using a configured message string.
-   *
-   * @param string $configKey
-   *   The configuration key holding the message text.
-   * @param string $method
-   *   The messenger method to call (e.g. 'addStatus', 'addWarning',
-   *   'addError').
-   */
-  private function displayConfigMessage(string $configKey, string $method): void {
-    $this->messenger()->{$method}($this->t('@message', [
-      '@message' => $this->configuration[$configKey],
-    ]));
-  }
 
   /**
    * Logs a skip warning for a submission that cannot be processed.
