@@ -30,12 +30,23 @@ webform.handler.mvault_membership:
     membership_duration_days:
       type: integer
       label: 'Membership duration (days)'
-    success_message:
-      type: text
-      label: 'Success message'
     already_active_message:
-      type: text
+      type: mapping
       label: 'Already active message'
+      mapping:
+        value:
+          type: text
+          label: 'Value'
+        format:
+          type: string
+          label: 'Text format'
     error_message:
-      type: text
+      type: mapping
       label: 'Error message'
+      mapping:
+        value:
+          type: text
+          label: 'Value'
+        format:
+          type: string
+          label: 'Text format'

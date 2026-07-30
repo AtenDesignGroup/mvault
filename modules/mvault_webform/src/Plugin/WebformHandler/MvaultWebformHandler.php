@@ -75,9 +75,14 @@ class MvaultWebformHandler extends WebformHandlerBase {
       'membership_duration_days' => 0,
       'mvault_status_field' => '',
       'mvault_activation_code_field' => '',
-      'success_message' => 'Your PBS Passport membership has been activated. Thank you!',
-      'already_active_message' => 'You already have an active PBS Passport membership and are not eligible for this offer.',
-      'error_message' => 'We were unable to process your membership at this time. Please contact support.',
+      'already_active_message' => [
+        'value' => 'You already have an active PBS Passport membership and are not eligible for this offer.',
+        'format' => 'basic_html',
+      ],
+      'error_message' => [
+        'value' => 'We were unable to process your membership at this time. Please contact support.',
+        'format' => 'basic_html',
+      ],
     ];
   }
 
@@ -187,33 +192,27 @@ class MvaultWebformHandler extends WebformHandlerBase {
 
     $form['messages'] = [
       '#type' => 'details',
-      '#title' => $this->t('Messages'),
+      '#title' => $this->t('Confirmation message overrides'),
       '#open' => FALSE,
       '#weight' => 25,
     ];
 
-    $form['messages']['success_message'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Success message'),
-      '#description' => $this->t('Displayed when a membership is successfully created or renewed.'),
-      '#default_value' => $this->configuration['success_message'],
-      '#rows' => 2,
-    ];
-
     $form['messages']['already_active_message'] = [
-      '#type' => 'textarea',
+      '#type' => 'text_format',
       '#title' => $this->t('Already active message'),
       '#description' => $this->t('Displayed when the user already has an active membership and is ineligible.'),
-      '#default_value' => $this->configuration['already_active_message'],
-      '#rows' => 2,
+      '#default_value' => $this->configuration['already_active_message']['value'] ?? $this->configuration['already_active_message'],
+      '#format' => $this->configuration['already_active_message']['format'] ?? 'basic_html',
+      '#allowed_formats' => ['basic_html', 'full_html'],
     ];
 
     $form['messages']['error_message'] = [
-      '#type' => 'textarea',
+      '#type' => 'text_format',
       '#title' => $this->t('Error message'),
       '#description' => $this->t('Displayed when the API call fails. Keep generic — do not expose API details.'),
-      '#default_value' => $this->configuration['error_message'],
-      '#rows' => 2,
+      '#default_value' => $this->configuration['error_message']['value'] ?? $this->configuration['error_message'],
+      '#format' => $this->configuration['error_message']['format'] ?? 'basic_html',
+      '#allowed_formats' => ['basic_html', 'full_html'],
     ];
 
     return $this->setSettingsParents($form);
@@ -254,9 +253,6 @@ class MvaultWebformHandler extends WebformHandlerBase {
     ]);
     $this->configuration['mvault_activation_code_field'] = (string) $form_state->getValue([
       'mvault_activation_code_field',
-    ]);
-    $this->configuration['success_message'] = $form_state->getValue([
-      'success_message',
     ]);
     $this->configuration['already_active_message'] = $form_state->getValue([
       'already_active_message',
@@ -498,17 +494,22 @@ class MvaultWebformHandler extends WebformHandlerBase {
   public function preprocessConfirmation(array &$variables) {
     // Swap out the confirmation message if there's an issue.
     $webform_submission = $variables['webform_submission'];
-    $message = $variables['message'];
     $data = $webform_submission->getData();
     $mvault_status = $data['mvault_status'];
 
     if ($mvault_status == 'active') {
-      $message['#markup'] = $this->configuration['already_active_message'];
-      $variables['message'] = $message;
+      $variables['message'] = [
+        '#type' => 'processed_text',
+        '#text' => $this->configuration['already_active_message']['value'] ?? $this->configuration['already_active_message'],
+        '#format' => $this->configuration['already_active_message']['format'] ?? 'basic_html',
+      ];
     }
     elseif ($mvault_status == 'error') {
-      $message['#markup'] = $this->configuration['error_message'];
-      $variables['message'] = $message;
+      $variables['message'] = [
+        '#type' => 'processed_text',
+        '#text' => $this->configuration['error_message']['value'] ?? $this->configuration['error_message'],
+        '#format' => $this->configuration['error_message']['format'] ?? 'basic_html',
+      ];
     }
 
   }
